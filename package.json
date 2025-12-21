@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 8080 -H 127.0.0.1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@huggingface/inference": "^4.13.5",
     "next": "16.1.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
