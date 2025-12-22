@@ -9,11 +9,16 @@ export default function Home() {
   const [feedback, setFeedback] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [uploadedImageName, setUploadedImageName] = useState<string>('');
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Save image name
+    setUploadedImageName(file.name);
 
     // Show image preview
     const reader = new FileReader();
@@ -81,41 +86,57 @@ export default function Home() {
     }
   };
 
-  const handleSubmitEvaluation = () => {
+  const handleSubmitEvaluation = async () => {
     if (rating === 0) {
       alert('Please rate the recipe!');
       return;
     }
 
-    // Create evaluation object
-    const evaluation = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      ingredients: ingredients,
-      recipe: recipe.substring(0, 200) + '...', // Save preview
-      rating: rating,
-      feedback: feedback,
-      imageName: selectedImage ? 'image-' + Date.now() : 'manual input'
-    };
+    if (!recipe) {
+      alert('Please generate a recipe first!');
+      return;
+    }
 
-    // Get existing evaluations from localStorage
-    const existingEvals = localStorage.getItem('evaluations');
-    const evaluations = existingEvals ? JSON.parse(existingEvals) : [];
-    
-    // Add new evaluation
-    evaluations.push(evaluation);
-    
-    // Save back to localStorage
-    localStorage.setItem('evaluations', JSON.stringify(evaluations));
+    setIsSubmitting(true);
 
-    alert(`✅ Evaluation Submitted & Saved!\n\nRating: ${rating}/5\nTotal Evaluations: ${evaluations.length}`);
-    
-    // Reset form
-    setIngredients('');
-    setRecipe('');
-    setRating(0);
-    setFeedback('');
-    setSelectedImage(null);
+    try {
+      // Save to MongoDB via API
+      const response = await fetch('/api/evaluations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ingredients: ingredients,
+          recipe: recipe,
+          rating: rating,
+          feedback: feedback,
+          imageName: uploadedImageName || 'manual input'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save evaluation');
+      }
+
+      const data = await response.json();
+      
+      alert(`✅ Evaluation Saved to Database!\n\nRating: ${rating}/5 ⭐\nYour feedback has been recorded.`);
+      
+      // Reset form
+      setIngredients('');
+      setRecipe('');
+      setRating(0);
+      setFeedback('');
+      setSelectedImage(null);
+      setUploadedImageName('');
+      
+    } catch (error) {
+      console.error('Error saving evaluation:', error);
+      alert('❌ Failed to save evaluation to database. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -247,9 +268,10 @@ export default function Home() {
             {/* Submit Button */}
             <button
               onClick={handleSubmitEvaluation}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-lg shadow-lg transition-colors"
+              disabled={isSubmitting}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-4 px-6 rounded-lg shadow-lg transition-colors"
             >
-              Submit Evaluation 🎯
+              {isSubmitting ? '💾 Saving to Database...' : 'Submit Evaluation 🎯'}
             </button>
           </>
         )}
@@ -257,7 +279,7 @@ export default function Home() {
         {/* Info Footer */}
         <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
           <p className="text-sm text-green-800">
-            💡 <strong>AI Training:</strong> By evaluating how well AI identifies ingredients and generates recipes, you're demonstrating the exact skills needed for AI training jobs!
+            💡 <strong>AI Training:</strong> By evaluating how well AI identifies ingredients and generates recipes, you're demonstrating the exact skills needed for AI training jobs! All evaluations are saved to MongoDB.
           </p>
         </div>
       </div>
