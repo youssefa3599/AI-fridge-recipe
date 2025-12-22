@@ -5,10 +5,8 @@ export async function POST(request: NextRequest) {
   console.log('=== RECIPE API ROUTE CALLED ===');
   
   try {
-    // Check API key first
     const apiKey = process.env.GEMINI_API_KEY;
     console.log('✅ API Key exists:', !!apiKey);
-    console.log('✅ API Key length:', apiKey?.length || 0);
     
     if (!apiKey) {
       console.error('❌ GEMINI_API_KEY is not set!');
@@ -18,7 +16,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse JSON body
     const body = await request.json();
     const { ingredients } = body;
     
@@ -32,47 +29,46 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Initializing Gemini...');
-
-    // Initialize Gemini (same way as detect-ingredients!)
     const ai = new GoogleGenAI({ apiKey });
 
-    const prompt = `Create a detailed, delicious recipe using these ingredients: ${ingredients}
+    // Optimized prompt - still detailed but generates faster
+    const prompt = `Create a delicious recipe using: ${ingredients}
 
-Write the recipe in this exact format:
+Format (be concise but complete):
 
 **[Creative Recipe Name]**
 
 **Ingredients:**
-- [List each ingredient with measurements]
+- [list with measurements]
 
 **Instructions:**
-1. [Detailed first step]
-2. [Detailed second step]
-3. [Continue with clear steps]
+1. [clear steps]
 
-**Cooking Time:** [Total time]
-**Difficulty:** Easy/Medium/Hard
-**Servings:** [Number of servings]
+**Time:** [minutes]
+**Difficulty:** [Easy/Medium/Hard]
+**Servings:** [number]
 
-Make the recipe creative, delicious, and practical.`;
+Make it tasty and practical!`;
 
-    console.log('✅ Calling Gemini API for recipe generation...');
+    console.log('✅ Calling Gemini API...');
 
-    // Call Gemini API (same way as detect-ingredients!)
-    // USE THE SAME MODEL AS DETECT-INGREDIENTS!
+    // Use fastest model with generation config for speed
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // ← Changed from gemini-2.0-flash-exp
+      model: 'gemini-1.5-flash', // Fastest stable model
       contents: [
         {
           role: 'user',
           parts: [{ text: prompt }]
         }
-      ]
+      ],
+      generationConfig: {
+        maxOutputTokens: 800, // Limit output for speed
+        temperature: 0.7, // Balanced creativity
+      }
     });
 
-    console.log('✅ Gemini API response received');
+    console.log('✅ Response received');
     let recipe = response.text || '';
-    console.log('✅ Recipe length:', recipe.length);
 
     if (!recipe) {
       return NextResponse.json(
@@ -81,7 +77,6 @@ Make the recipe creative, delicious, and practical.`;
       );
     }
 
-    // Ensure recipe has proper formatting
     if (!recipe.includes('**')) {
       recipe = `**Recipe with ${ingredients}**\n\n${recipe}`;
     }
@@ -94,34 +89,26 @@ Make the recipe creative, delicious, and practical.`;
 
   } catch (error: any) {
     console.error('=== ❌ ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('Full error:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('Error:', error.message);
     
     let errorMessage = 'Failed to generate recipe';
     let statusCode = 500;
 
     if (error.message?.includes('quota') || error.message?.includes('429')) {
-      errorMessage = 'API quota exceeded. Please wait a few minutes and try again.';
+      errorMessage = 'API quota exceeded. Please wait a few minutes.';
       statusCode = 429;
-    } else if (error.message?.includes('API key') || error.message?.includes('API_KEY')) {
-      errorMessage = 'Invalid API key. Check your GEMINI_API_KEY.';
-    } else if (error.message?.includes('Cannot find module')) {
-      errorMessage = 'Missing @google/genai package. Run: npm install @google/genai';
+    } else if (error.message?.includes('API key')) {
+      errorMessage = 'Invalid API key configuration.';
     } else if (error.message) {
       errorMessage = error.message;
     }
 
     return NextResponse.json(
-      { 
-        error: errorMessage, 
-        details: error.message,
-        type: error.constructor.name
-      },
+      { error: errorMessage, details: error.message },
       { status: statusCode }
     );
   }
 }
 
-export const maxDuration = 30;
+// CRITICAL: Vercel free tier maximum is 10 seconds
+export const maxDuration = 10;
