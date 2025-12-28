@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
           role: 'user',
           parts: [
             { 
-              text: 'Look at this image and identify all food ingredients you can see. List them as a simple comma-separated list with no extra text. For example: "chicken, tomatoes, lettuce, cheese, bread". Only list the ingredient names, nothing else.' 
+              text: 'Look at this image and identify all food ingredients you can see. List them as a simple comma-separated list with no extra text. For example: "chicken, tomatoes, lettuce, cheese, bread". Only list the ingredient names, nothing else. If you cannot see any food ingredients, respond with exactly: "NO_INGREDIENTS_FOUND"' 
             },
             {
               inlineData: {
@@ -84,11 +84,49 @@ export async function POST(request: NextRequest) {
       .trim();
 
     console.log('Cleaned ingredients:', ingredients);
+
+    // ✅ NEW: Validate ingredients were actually detected
+    const lowerIngredients = ingredients.toLowerCase();
+    if (!ingredients || 
+        ingredients.length === 0 || 
+        lowerIngredients.includes('no_ingredient') || // Catches "no_ingredients" or "no_ingrediests" typos
+        lowerIngredients.includes('no ingredient') ||
+        lowerIngredients.includes('not found') ||
+        lowerIngredients.includes('cannot identify') ||
+        lowerIngredients.includes('unable to') ||
+        lowerIngredients.includes('no food') ||
+        ingredients.split(',').filter(item => item.trim().length > 0).length === 0) {
+      
+      console.log('=== NO INGREDIENTS DETECTED ===');
+      return NextResponse.json(
+        { 
+          error: 'No food ingredients detected in this image. Please upload a clear photo of your fridge interior or food items.',
+          isEmpty: true
+        },
+        { status: 400 }
+      );
+    }
+
+    // ✅ NEW: Basic sanity check - at least 2 characters per ingredient on average
+    const ingredientList = ingredients.split(',').map(i => i.trim()).filter(i => i.length > 0);
+    if (ingredientList.length === 0 || ingredientList.some(item => item.length < 2)) {
+      console.log('=== INVALID INGREDIENTS FORMAT ===');
+      return NextResponse.json(
+        { 
+          error: 'Could not clearly identify ingredients. Please upload a clearer image with visible food items.',
+          isEmpty: true
+        },
+        { status: 400 }
+      );
+    }
+
     console.log('=== Success ===');
+    console.log('Valid ingredients found:', ingredientList.length);
 
     return NextResponse.json({ 
       ingredients,
-      success: true 
+      success: true,
+      count: ingredientList.length
     });
 
   } catch (error: any) {
